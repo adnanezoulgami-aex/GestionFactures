@@ -62,21 +62,41 @@ utilisé en bas de la barre latérale.
 
 | Stockage | Quand | Durabilité |
 | --- | --- | --- |
-| **Postgres / Supabase** | Dès qu'une chaîne de connexion est configurée | Survit à tout redémarrage |
+| **Postgres** (Neon, Supabase, autre) | Dès qu'une chaîne de connexion est configurée | Survit à tout redémarrage |
 | **SQLite** | Sinon | Suffisant en local, perdu sur un hébergement éphémère |
 
 Le disque de Streamlit Community Cloud étant éphémère, **Postgres est
 indispensable pour un déploiement en ligne** : sans lui, les cases cochées
 disparaissent à chaque redémarrage du serveur.
 
-### Configurer Supabase
+### Quel fournisseur Postgres ?
 
-1. Dans le tableau de bord Supabase, bouton **Connect** en haut, section
-   **Connection string**, mode **Transaction pooler** (port 6543 — mieux adapté
-   aux connexions courtes d'une application web que le port 5432).
-2. Remplacez `[YOUR-PASSWORD]` par le mot de passe de la base (réinitialisable
-   dans *Settings > Database > Reset database password*).
-3. **En local** : copiez `.streamlit/secrets.toml.example` en
+L'application n'est liée à aucun hébergeur : **toute base Postgres convient**,
+seule la chaîne de connexion change. Le critère décisif pour un usage mensuel
+est le comportement en cas d'inactivité.
+
+| Fournisseur | Gratuit | Inactivité |
+| --- | --- | --- |
+| **Neon** | 0,5 Go | Se met en veille après quelques minutes mais **reprend seule en moins d'une seconde**, sans intervention |
+| **Supabase** | 500 Mo | Projet **suspendu après ~7 jours**, à réactiver à la main depuis le tableau de bord |
+
+Pour une application ouverte une fois par mois, **Neon est le choix le plus
+sûr** : rien à réveiller, rien à surveiller. Supabase reste parfaitement
+utilisable si son projet est maintenu actif (voir plus bas).
+
+Ces politiques évoluent : vérifiez-les au moment de créer le projet.
+
+### Configurer la base
+
+1. Récupérez la chaîne de connexion :
+   * **Neon** — tableau de bord du projet, encadré *Connection string*.
+     Conservez le paramètre `?sslmode=require`.
+   * **Supabase** — bouton **Connect** en haut, section *Connection string*,
+     mode **Transaction pooler** (port 6543, mieux adapté aux connexions
+     courtes d'une application web que le port 5432). Remplacez
+     `[YOUR-PASSWORD]` par le mot de passe de la base, réinitialisable dans
+     *Settings > Database > Reset database password*.
+2. **En local** : copiez `.streamlit/secrets.toml.example` en
    `.streamlit/secrets.toml` et collez-y la chaîne. Ce fichier est exclu du
    dépôt par `.gitignore`.
 4. **Sur Streamlit Cloud** : collez le même contenu dans *Settings > Secrets*.
@@ -87,15 +107,26 @@ Aucune autre table n'est touchée.
 Alternative sans fichier de secrets : définir la variable d'environnement
 `FACTURES_POSTGRES_URL` (ou `SUPABASE_DB_URL`).
 
-### Éviter la mise en pause du projet
+### Éviter les mises en veille
 
-Un projet Supabase gratuit est suspendu après environ 7 jours sans activité —
-un piège pour une application utilisée une fois par mois. Le workflow
-[`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) ouvre une
-connexion tous les 3 jours pour l'en empêcher.
+Deux hébergements gratuits s'endorment après ~7 jours sans activité, ce qui
+piège une application utilisée une fois par mois : le projet **Supabase** (à
+réactiver manuellement) et l'app **Streamlit Community Cloud** (à réveiller
+d'un clic, ~30 s). Le workflow
+[`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) les
+sollicite tous les 3 jours.
 
-Pour l'activer, ajoutez le secret `FACTURES_POSTGRES_URL` au dépôt
-(*Settings > Secrets and variables > Actions*).
+Ses deux étapes sont indépendantes et facultatives ; chacune est simplement
+ignorée si son paramètre est absent. Dans *Settings > Secrets and variables >
+Actions* :
+
+| Paramètre | Type | Rôle |
+| --- | --- | --- |
+| `FACTURES_POSTGRES_URL` | Secret | Maintient la base active. **Inutile avec Neon**, qui reprend seule. |
+| `STREAMLIT_APP_URL` | Variable | Maintient l'application éveillée. |
+
+L'app endormie ne fait perdre aucune donnée : tout est dans la base. Ce n'est
+qu'un confort.
 
 ## Comment le nom du client est identifié
 

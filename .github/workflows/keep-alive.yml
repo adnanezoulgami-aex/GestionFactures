@@ -1,13 +1,20 @@
-## Empêche la mise en pause du projet Supabase.
+## Empêche la mise en veille de la base et de l'application.
 ##
-## Un projet Supabase gratuit est suspendu après environ 7 jours sans activité.
-## Une application de facturation n'étant sollicitée qu'en fin de mois, elle
-## retrouverait un projet endormi. Cette tâche ouvre une connexion tous les
-## trois jours, ce qui suffit à le garder actif.
+## Deux hébergements gratuits s'endorment après une période d'inactivité, ce qui
+## piège une application de facturation sollicitée une fois par mois :
 ##
-## Prérequis : ajouter le secret `FACTURES_POSTGRES_URL` dans le dépôt
-## (Settings > Secrets and variables > Actions > New repository secret) avec la
-## même chaîne de connexion que celle des secrets Streamlit.
+##   * la base (Supabase suspend un projet gratuit après ~7 jours) ;
+##   * l'application (Streamlit Community Cloud endort une app après ~7 jours).
+##
+## Cette tâche les sollicite tous les 3 jours. Chaque étape est facultative et
+## se contente d'un avertissement si son paramètre est absent.
+##
+## Paramètres, dans Settings > Secrets and variables > Actions :
+##   * secret   `FACTURES_POSTGRES_URL` — chaîne de connexion de la base ;
+##   * variable `STREAMLIT_APP_URL`     — adresse publique de l'application.
+##
+## Inutile si votre base ne se met jamais en pause (Neon, par exemple, reprend
+## seule en moins d'une seconde) : dans ce cas, seule l'étape application sert.
 
 name: keep-alive
 
@@ -38,8 +45,8 @@ jobs:
           PYTHONPATH: src
         run: |
           if [ -z "$FACTURES_POSTGRES_URL" ]; then
-            echo "::error::Secret FACTURES_POSTGRES_URL absent du dépôt."
-            exit 1
+            echo "::warning::Secret FACTURES_POSTGRES_URL absent : étape ignorée."
+            exit 0
           fi
           python - <<'PY'
           import os
@@ -52,3 +59,23 @@ jobs:
               store.get_many(["keep-alive"])
           print("Base active.")
           PY
+
+      - name: Réveiller l'application
+        env:
+          APP_URL: ${{ vars.STREAMLIT_APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::warning::Variable STREAMLIT_APP_URL absente : étape ignorée."
+            exit 0
+          fi
+          # Une simple visite suffit à réarmer le compteur d'inactivité.
+          # `--max-time` borne l'attente si l'app était déjà endormie.
+          code=$(curl --silent --show-error --location --max-time 90 \
+                      --output /dev/null --write-out '%{http_code}' "$APP_URL")
+          echo "Réponse HTTP : $code"
+          # Une app en cours de réveil peut répondre autre chose que 200 sans
+          # que la visite soit perdue : seule une absence de réponse est un échec.
+          if [ -z "$code" ] || [ "$code" = "000" ]; then
+            echo "::error::Application injoignable à $APP_URL"
+            exit 1
+          fi
