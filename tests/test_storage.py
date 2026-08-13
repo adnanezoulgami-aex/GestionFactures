@@ -6,13 +6,37 @@ from pathlib import Path
 
 import pytest
 
-from factures.storage import SentStatusStore
+from factures.storage import SentStatusStore, default_db_path
 
 
 @pytest.fixture
 def store(tmp_path: Path):
     with SentStatusStore(tmp_path / "test.db") as instance:
         yield instance
+
+
+class TestDefaultPath:
+    def test_default_path_is_absolute(self) -> None:
+        """Relatif, il aurait suivi le dossier d'exécution."""
+        assert default_db_path().is_absolute()
+
+    def test_default_path_sits_in_the_project(self) -> None:
+        path = default_db_path()
+        assert path.parent.name == "data"
+        assert (path.parents[1] / "src" / "factures").is_dir()
+
+    def test_default_path_ignores_the_working_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        before = default_db_path()
+        monkeypatch.chdir(tmp_path)
+        assert default_db_path() == before
+
+    def test_environment_variable_overrides_it(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("FACTURES_DB_PATH", str(tmp_path / "ailleurs.db"))
+        assert default_db_path() == tmp_path / "ailleurs.db"
 
 
 class TestSentStatusStore:

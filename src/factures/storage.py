@@ -24,7 +24,13 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 ENV_DB_PATH = "FACTURES_DB_PATH"
-DEFAULT_DB_PATH = Path("data") / "factures.db"
+
+#: Racine du projet, déduite de l'emplacement du paquet (`<racine>/src/factures`).
+#: Le chemin par défaut est absolu à dessein : relatif, il aurait suivi le
+#: dossier d'exécution et la base se serait retrouvée ailleurs à chaque
+#: lancement depuis un répertoire différent.
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "factures.db"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sent_status (
