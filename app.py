@@ -26,6 +26,7 @@ _SRC = Path(__file__).resolve().parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from factures.backend import SentStatusBackend, create_store  # noqa: E402
 from factures.extraction import extract_invoices  # noqa: E402
 from factures.models import (  # noqa: E402
     MOIS_FR,
@@ -40,7 +41,6 @@ from factures.packaging import (  # noqa: E402
     build_zip_archive,
     invoice_display_name,
 )
-from factures.storage import SentStatusStore  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 
@@ -70,9 +70,48 @@ st.set_page_config(page_title=APP_TITLE, page_icon="🧾", layout="wide")
 
 
 @st.cache_resource(show_spinner=False)
-def get_store() -> SentStatusStore:
-    """Base de suivi des envois, partagée par toutes les sessions du serveur."""
-    return SentStatusStore()
+def get_store() -> SentStatusBackend:
+    """Base de suivi des envois, partagée par toutes les sessions du serveur.
+
+    Postgres si une chaîne de connexion est configurée, SQLite sinon. Une
+    défaillance n'est pas masquée : elle est renvoyée pour que l'interface
+    l'affiche, plutôt que de laisser croire que les statuts sont enregistrés.
+    """
+    return create_store()
+
+
+def resolve_store() -> tuple[SentStatusBackend | None, str | None]:
+    """Magasin de statuts, ou le message d'erreur à afficher.
+
+    Une base injoignable ne doit pas empêcher d'extraire et de télécharger les
+    factures : seul le suivi des envois est indisponible.
+    """
+    try:
+        return get_store(), None
+    except Exception as exc:
+        logging.exception("Connexion au stockage impossible")
+        return None, str(exc)
+
+
+def render_storage_status(store: SentStatusBackend | None, error: str | None) -> None:
+    """Informe sur la durabilité du suivi, sans jamais dévoiler de secret."""
+    if error is not None:
+        st.sidebar.error(
+            "Base de suivi injoignable : les cases « Envoyé » ne seront pas "
+            f"enregistrées. Les factures restent téléchargeables.\n\n`{error}`",
+            icon="⛔",
+        )
+        return
+    if store is None:
+        return
+    if store.is_persistent:
+        st.sidebar.caption(f"Suivi des envois : {store.description}")
+    else:
+        st.sidebar.warning(
+            "Stockage non persistant : les cases « Envoyé » seront perdues au "
+            "redémarrage du serveur.",
+            icon="⚠️",
+        )
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -171,14 +210,18 @@ def filter_invoices(
 def on_toggle_sent(invoice: Invoice) -> None:
     """Callback de la case « Envoyé » : écrit immédiatement en base."""
     value = bool(st.session_state.get(f"sent_{invoice.key}", False))
+    store, error = resolve_store()
+    if store is None:
+        st.toast(f"Statut non enregistré : {error}", icon="⚠️")
+        return
     try:
-        get_store().set_sent(
+        store.set_sent(
             invoice.key,
             value,
             client_name=invoice.client_name,
             period=invoice.period,
         )
-    except Exception:  # pragma: no cover - défaillance disque
+    except Exception:  # pragma: no cover - coupure réseau ou disque
         logging.exception("Écriture du statut impossible: %s", invoice.key)
         st.toast("Statut non enregistré : base de données inaccessible.", icon="⚠️")
 
@@ -228,13 +271,8 @@ def render_sidebar() -> None:
         if st.sidebar.button("Vider la session", use_container_width=True):
             reset_session()
 
-    store = get_store()
-    if not store.is_persistent:
-        st.sidebar.warning(
-            "Stockage non persistant : les cases « Envoyé » seront perdues au "
-            "redémarrage du serveur.",
-            icon="⚠️",
-        )
+    st.sidebar.divider()
+    render_storage_status(*resolve_store())
 
 
 def clear_batch_widgets() -> None:
@@ -541,7 +579,14 @@ def main() -> None:
     render_diagnostics(report, invoices)
     render_name_corrections(invoices)
 
-    statuses = get_store().get_many(invoice.key for invoice in invoices)
+    store, _ = resolve_store()
+    try:
+        statuses = (
+            store.get_many(invoice.key for invoice in invoices) if store else {}
+        )
+    except Exception:  # pragma: no cover - coupure réseau
+        logging.exception("Lecture des statuts impossible")
+        statuses = {}
     periods = sorted({invoice.period for invoice in invoices}, reverse=True)
 
     st.divider()

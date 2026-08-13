@@ -1,0 +1,54 @@
+## Empêche la mise en pause du projet Supabase.
+##
+## Un projet Supabase gratuit est suspendu après environ 7 jours sans activité.
+## Une application de facturation n'étant sollicitée qu'en fin de mois, elle
+## retrouverait un projet endormi. Cette tâche ouvre une connexion tous les
+## trois jours, ce qui suffit à le garder actif.
+##
+## Prérequis : ajouter le secret `FACTURES_POSTGRES_URL` dans le dépôt
+## (Settings > Secrets and variables > Actions > New repository secret) avec la
+## même chaîne de connexion que celle des secrets Streamlit.
+
+name: keep-alive
+
+on:
+  schedule:
+    # 06:17 UTC tous les 3 jours. Heure décalée : les tâches planifiées à
+    # l'heure ronde sont massivement retardées chez GitHub.
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer le client Postgres
+        run: pip install "psycopg[binary]>=3.2,<4.0" "psycopg-pool>=3.2,<4.0"
+
+      - name: Réveiller la base
+        env:
+          FACTURES_POSTGRES_URL: ${{ secrets.FACTURES_POSTGRES_URL }}
+          PYTHONPATH: src
+        run: |
+          if [ -z "$FACTURES_POSTGRES_URL" ]; then
+            echo "::error::Secret FACTURES_POSTGRES_URL absent du dépôt."
+            exit 1
+          fi
+          python - <<'PY'
+          import os
+
+          from factures.postgres_storage import PostgresSentStatusStore
+
+          # Ouvrir le magasin crée la table si besoin et exécute une requête :
+          # c'est exactement l'activité qui empêche la mise en pause.
+          with PostgresSentStatusStore(os.environ["FACTURES_POSTGRES_URL"]) as store:
+              store.get_many(["keep-alive"])
+          print("Base active.")
+          PY

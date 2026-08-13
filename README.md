@@ -55,11 +55,47 @@ Les dépendances de `requirements.txt` et les réglages de
 `.streamlit/config.toml` (limite d'envoi portée à 500 Mo) sont pris en compte
 automatiquement.
 
-> **Persistance des statuts « Envoyé ».** Le système de fichiers de Streamlit
-> Community Cloud est éphémère : les cases cochées sont perdues au redémarrage
-> du serveur. L'application le signale dans la barre latérale. Pour un suivi
-> durable, hébergez l'application sur une machine disposant d'un disque
-> persistant et pointez `FACTURES_DB_PATH` vers ce disque.
+## Persistance des statuts « Envoyé »
+
+L'application choisit son stockage automatiquement, et affiche lequel est
+utilisé en bas de la barre latérale.
+
+| Stockage | Quand | Durabilité |
+| --- | --- | --- |
+| **Postgres / Supabase** | Dès qu'une chaîne de connexion est configurée | Survit à tout redémarrage |
+| **SQLite** | Sinon | Suffisant en local, perdu sur un hébergement éphémère |
+
+Le disque de Streamlit Community Cloud étant éphémère, **Postgres est
+indispensable pour un déploiement en ligne** : sans lui, les cases cochées
+disparaissent à chaque redémarrage du serveur.
+
+### Configurer Supabase
+
+1. Dans le tableau de bord Supabase, bouton **Connect** en haut, section
+   **Connection string**, mode **Transaction pooler** (port 6543 — mieux adapté
+   aux connexions courtes d'une application web que le port 5432).
+2. Remplacez `[YOUR-PASSWORD]` par le mot de passe de la base (réinitialisable
+   dans *Settings > Database > Reset database password*).
+3. **En local** : copiez `.streamlit/secrets.toml.example` en
+   `.streamlit/secrets.toml` et collez-y la chaîne. Ce fichier est exclu du
+   dépôt par `.gitignore`.
+4. **Sur Streamlit Cloud** : collez le même contenu dans *Settings > Secrets*.
+
+La table `facture_envois` est créée automatiquement au premier démarrage.
+Aucune autre table n'est touchée.
+
+Alternative sans fichier de secrets : définir la variable d'environnement
+`FACTURES_POSTGRES_URL` (ou `SUPABASE_DB_URL`).
+
+### Éviter la mise en pause du projet
+
+Un projet Supabase gratuit est suspendu après environ 7 jours sans activité —
+un piège pour une application utilisée une fois par mois. Le workflow
+[`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml) ouvre une
+connexion tous les 3 jours pour l'en empêcher.
+
+Pour l'activer, ajoutez le secret `FACTURES_POSTGRES_URL` au dépôt
+(*Settings > Secrets and variables > Actions*).
 
 ## Comment le nom du client est identifié
 
@@ -122,8 +158,10 @@ src/factures/
 ├── extraction.py           Analyse de la mise en page des PDF
 ├── naming.py               Noms de fichiers sûrs et uniques
 ├── packaging.py            Découpe des PDF et archives ZIP
-└── storage.py              Persistance SQLite du statut « envoyé »
-tests/                      110 tests (extraction, nommage, ZIP, base, UI)
+├── backend.py              Contrat commun et choix du stockage
+├── storage.py              Backend SQLite
+└── postgres_storage.py     Backend Postgres / Supabase
+tests/                      129 tests (extraction, nommage, ZIP, stockage, UI)
 ```
 
 Les tests fabriquent leurs propres PDF aux coordonnées du gabarit
@@ -135,4 +173,10 @@ données.
 
 | Variable | Rôle | Défaut |
 | --- | --- | --- |
-| `FACTURES_DB_PATH` | Emplacement de la base de suivi des envois | `data/factures.db` |
+| `FACTURES_POSTGRES_URL` | Chaîne de connexion Postgres. Sa présence active le backend Postgres. | — |
+| `SUPABASE_DB_URL` | Alias accepté pour la précédente | — |
+| `FACTURES_DB_PATH` | Emplacement de la base SQLite, quand Postgres n'est pas configuré | `data/factures.db` |
+| `FACTURES_TEST_POSTGRES_URL` | Base contre laquelle exécuter les tests d'intégration Postgres | — |
+
+Aucun secret n'est versionné : `.gitignore` exclut `.streamlit/secrets.toml`.
+Les mots de passe sont masqués dans les journaux et dans l'interface.

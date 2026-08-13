@@ -97,6 +97,13 @@ class SentStatusStore:
     def path(self) -> Path:
         return self._path
 
+    @property
+    def description(self) -> str:
+        """Libellé affichable du stockage."""
+        if not self._is_persistent:
+            return "SQLite en mémoire (non persistant)"
+        return f"SQLite — {self._path}"
+
     def get_many(self, keys: Iterable[str]) -> dict[str, bool]:
         """Statut des clés demandées. Une clé inconnue vaut `False`."""
         wanted = list(dict.fromkeys(keys))
