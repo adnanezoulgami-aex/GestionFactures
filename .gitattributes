@@ -1,0 +1,6 @@
+# Fins de ligne normalisées dans le dépôt, natives dans la copie de travail.
+* text=auto eol=lf
+
+*.png binary
+*.pdf binary
+*.zip binary

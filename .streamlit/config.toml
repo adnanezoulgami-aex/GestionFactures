@@ -1,0 +1,11 @@
+[server]
+# Un lot mensuel de plusieurs centaines de factures dépasse la limite par défaut.
+maxUploadSize = 500
+maxMessageSize = 500
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0B6E4F"

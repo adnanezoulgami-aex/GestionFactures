@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Tests / qualité
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Données applicatives — jamais versionnées
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Factures et pièces clients : ne doivent jamais rejoindre le dépôt
+*.pdf
+!tests/fixtures/*.pdf
+
+# Environnements / secrets
+.env
+.streamlit/secrets.toml
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
