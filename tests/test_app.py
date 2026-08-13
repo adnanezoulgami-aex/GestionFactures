@@ -257,6 +257,19 @@ class TestNameCorrection:
         assert seeded.text_input(key="fix_name").value != first_name
 
 
+class TestStorageStatus:
+    def test_sqlite_deployment_is_flagged_as_non_durable(
+        self, seeded: AppTest
+    ) -> None:
+        """L'équipe doit voir que les cases cochées ne survivront pas."""
+        warnings = [w.value for w in seeded.sidebar.warning]
+        assert any("perdues au prochain redéploiement" in w for w in warnings)
+
+    def test_the_backend_in_use_is_displayed(self, seeded: AppTest) -> None:
+        captions = [c.value for c in seeded.sidebar.caption]
+        assert any("Suivi des envois : SQLite" in c for c in captions)
+
+
 class TestBatchScopedState:
     def test_clearing_the_session_also_clears_the_filters(
         self, seeded: AppTest

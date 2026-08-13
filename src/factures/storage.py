@@ -104,6 +104,26 @@ class SentStatusStore:
             return "SQLite en mémoire (non persistant)"
         return f"SQLite — {self._path}"
 
+    @property
+    def durability_warning(self) -> str:
+        """SQLite ne survit jamais à un redéploiement : toujours avertir.
+
+        Le fichier vit sur le serveur qui exécute l'application. En local il
+        persiste ; sur un hébergement conteneurisé (Streamlit Community Cloud)
+        il est recréé vide à chaque redémarrage, sans que l'écriture n'ait
+        jamais échoué. L'avertissement est donc inconditionnel.
+        """
+        if not self._is_persistent:
+            return (
+                "Stockage en mémoire : les cases « Envoyé » seront perdues dès "
+                "l'arrêt de l'application."
+            )
+        return (
+            "Suivi local à ce serveur : les cases « Envoyé » seront perdues au "
+            "prochain redéploiement. Configurez Postgres pour un suivi durable "
+            "et partagé entre les utilisateurs."
+        )
+
     def get_many(self, keys: Iterable[str]) -> dict[str, bool]:
         """Statut des clés demandées. Une clé inconnue vaut `False`."""
         wanted = list(dict.fromkeys(keys))

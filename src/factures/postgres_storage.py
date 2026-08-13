@@ -141,6 +141,11 @@ class PostgresSentStatusStore:
         return True
 
     @property
+    def durability_warning(self) -> None:
+        """Rien à signaler : la base survit aux redéploiements."""
+        return None
+
+    @property
     def description(self) -> str:
         """Libellé affichable : l'hôte, jamais le mot de passe."""
         host = redact(self._url).rpartition("@")[2] or "Postgres"

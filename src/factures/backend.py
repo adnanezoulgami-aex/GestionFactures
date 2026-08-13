@@ -38,6 +38,15 @@ class SentStatusBackend(Protocol):
     def description(self) -> str:
         """Libellé affichable du stockage, sans aucun secret."""
 
+    @property
+    def durability_warning(self) -> str | None:
+        """Message à afficher si les statuts risquent d'être perdus, sinon `None`.
+
+        `is_persistent` ne dit que si l'écriture aboutit. Une base SQLite dans
+        un conteneur s'écrit très bien puis disparaît au redéploiement : ce
+        message est le seul moyen d'en avertir l'utilisateur.
+        """
+
     def get_many(self, keys: Iterable[str]) -> dict[str, bool]:
         """Statut des clés demandées. Une clé inconnue vaut `False`."""
 

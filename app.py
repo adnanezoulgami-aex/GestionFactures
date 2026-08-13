@@ -104,14 +104,10 @@ def render_storage_status(store: SentStatusBackend | None, error: str | None) ->
         return
     if store is None:
         return
-    if store.is_persistent:
-        st.sidebar.caption(f"Suivi des envois : {store.description}")
-    else:
-        st.sidebar.warning(
-            "Stockage non persistant : les cases « Envoyé » seront perdues au "
-            "redémarrage du serveur.",
-            icon="⚠️",
-        )
+    st.sidebar.caption(f"Suivi des envois : {store.description}")
+    warning = store.durability_warning
+    if warning:
+        st.sidebar.warning(warning, icon="⚠️")
 
 
 @st.cache_data(show_spinner=False, max_entries=8)

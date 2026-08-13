@@ -54,6 +54,20 @@ class TestSentStatusStore:
         assert store.get_many([]) == {}
         store.set_many({})  # ne doit pas lever
 
+    def test_always_warns_that_sqlite_is_not_durable(
+        self, store: SentStatusStore
+    ) -> None:
+        """Une écriture qui aboutit ne prouve pas que la donnée survivra."""
+        assert store.is_persistent is True
+        assert "redéploiement" in store.durability_warning
+
+    def test_in_memory_fallback_warns_too(self, tmp_path: Path) -> None:
+        blocker = tmp_path / "fichier"
+        blocker.write_text("pas un dossier", encoding="utf-8")
+        store = SentStatusStore(blocker / "sous" / "base.db")
+        assert "mémoire" in store.durability_warning
+        store.close()
+
     def test_creates_missing_parent_directories(self, tmp_path: Path) -> None:
         store = SentStatusStore(tmp_path / "a" / "b" / "c.db")
         assert store.is_persistent
