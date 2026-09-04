@@ -20,10 +20,13 @@ from typing import Protocol, runtime_checkable
 logger = logging.getLogger(__name__)
 
 #: Chaîne de connexion Postgres. Renseignée par l'utilisateur, jamais versionnée.
+#:
+#: Ce nom est propre à l'application, et c'est délibéré : accepter un nom
+#: générique comme ``SUPABASE_DB_URL`` reviendrait à se brancher sur la première
+#: base Supabase configurée sur le poste — potentiellement une base de
+#: production sans rapport avec cette application. Le nom doit être choisi
+#: explicitement pour elle.
 ENV_POSTGRES_URL = "FACTURES_POSTGRES_URL"
-
-#: Alias accepté : les projets Supabase exposent leur URL sous ce nom.
-ENV_SUPABASE_URL = "SUPABASE_DB_URL"
 
 
 @runtime_checkable
@@ -74,10 +77,9 @@ def configured_postgres_url() -> str | None:
     (`.streamlit/secrets.toml` en local, interface Secrets sur Streamlit Cloud).
     La valeur n'est ni journalisée ni affichée.
     """
-    for variable in (ENV_POSTGRES_URL, ENV_SUPABASE_URL):
-        value = os.environ.get(variable, "").strip()
-        if value:
-            return value
+    value = os.environ.get(ENV_POSTGRES_URL, "").strip()
+    if value:
+        return value
 
     # Tout l'accès aux secrets est protégé : Streamlit peut être absent (tests
     # du domaine) et `st.secrets` lève dès la première lecture quand aucun
@@ -85,12 +87,11 @@ def configured_postgres_url() -> str | None:
     try:
         import streamlit as st
 
-        for section, key in (("postgres", "url"), ("supabase", "db_url")):
-            block = st.secrets.get(section)
-            if isinstance(block, Mapping):
-                value = str(block.get(key, "")).strip()
-                if value:
-                    return value
+        block = st.secrets.get("postgres")
+        if isinstance(block, Mapping):
+            value = str(block.get("url", "")).strip()
+            if value:
+                return value
     except Exception:
         logger.debug("Secrets Streamlit indisponibles.", exc_info=True)
     return None

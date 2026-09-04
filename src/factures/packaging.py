@@ -1,10 +1,13 @@
-"""Découpe des factures en PDF individuels et assemblage des archives ZIP.
+"""Découpe des documents en PDF individuels et assemblage des archives ZIP.
+
+S'applique indifféremment aux factures et aux extraits de compte : seul le
+protocole `PagedDocument` est requis.
 
 Règles de nommage demandées :
 
-* une facture par client   -> ``NOM DU CLIENT.pdf`` à la racine de l'archive ;
-* plusieurs factures       -> dossier ``NOM DU CLIENT/`` contenant
-  ``NOM DU CLIENT - <n° facture>.pdf``.
+* un document par client   -> ``NOM DU CLIENT.pdf`` à la racine de l'archive ;
+* plusieurs documents      -> dossier ``NOM DU CLIENT/`` contenant
+  ``NOM DU CLIENT - <référence>.pdf``.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 
 import pymupdf
 
-from factures.models import Invoice
+from factures.models import PagedDocument
 from factures.naming import sanitize_filename, unique_filename
 
 logger = logging.getLogger(__name__)
@@ -27,29 +30,29 @@ _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
 class PackagingError(RuntimeError):
-    """Le PDF source d'une facture est absent ou inexploitable."""
+    """Le PDF source d'un document est absent ou inexploitable."""
 
 
-def _open_source(invoice: Invoice, sources: Mapping[str, bytes]) -> bytes:
+def _open_source(invoice: PagedDocument, sources: Mapping[str, bytes]) -> bytes:
     try:
         return sources[invoice.source_name]
     except KeyError as exc:
         raise PackagingError(
-            f"PDF source « {invoice.source_name} » indisponible pour la facture "
-            f"{invoice.invoice_number or invoice.first_page}."
+            f"PDF source « {invoice.source_name} » indisponible pour le document "
+            f"{invoice.reference or invoice.first_page}."
         ) from exc
 
 
-def build_invoice_pdf(
-    invoice: Invoice,
+def build_document_pdf(
+    invoice: PagedDocument,
     sources: Mapping[str, bytes],
     *,
     compress: bool = True,
 ) -> bytes:
-    """Extrait les pages d'une facture dans un PDF autonome.
+    """Extrait les pages d'un document dans un PDF autonome.
 
     Args:
-        invoice: la facture à isoler.
+        invoice: le document à isoler.
         sources: PDF d'origine, indexés par nom de fichier.
         compress: réduit les polices aux seuls glyphes utilisés. Une page
             extraite ré-embarque sinon l'intégralité des polices du document
@@ -80,7 +83,7 @@ def build_invoice_pdf(
                         extract.subset_fonts(verbose=False)
                     except Exception:  # pragma: no cover - police exotique
                         # La réduction est une optimisation : son échec ne doit
-                        # jamais empêcher la livraison de la facture.
+                        # jamais empêcher la livraison du document.
                         logger.warning(
                             "Réduction des polices impossible pour %s", invoice.key
                         )
@@ -92,16 +95,16 @@ def build_invoice_pdf(
         raise PackagingError(f"Découpe impossible : {exc}") from exc
 
 
-def invoice_display_name(invoice: Invoice) -> str:
+def document_display_name(invoice: PagedDocument) -> str:
     """Nom de fichier proposé au téléchargement unitaire : le nom du client."""
     return f"{sanitize_filename(invoice.client_name)}.pdf"
 
 
-def plan_archive_names(invoices: Sequence[Invoice]) -> dict[str, str]:
-    """Calcule le chemin de chaque facture dans l'archive.
+def plan_archive_names(invoices: Sequence[PagedDocument]) -> dict[str, str]:
+    """Calcule le chemin de chaque document dans l'archive.
 
     Returns:
-        Un dictionnaire ``clé de facture -> chemin dans le ZIP``. Les chemins
+        Un dictionnaire ``clé de document -> chemin dans le ZIP``. Les chemins
         sont garantis uniques, même si deux clients portent des noms qui
         deviennent identiques après nettoyage.
     """
@@ -109,7 +112,7 @@ def plan_archive_names(invoices: Sequence[Invoice]) -> dict[str, str]:
     # noms convergent après nettoyage (« A/B » et « A:B » donnent tous deux
     # « A-B ») ne doivent jamais être fusionnés dans un même dossier. Leurs
     # chemins seront simplement différenciés par `unique_filename`.
-    by_client: dict[str, list[Invoice]] = defaultdict(list)
+    by_client: dict[str, list[PagedDocument]] = defaultdict(list)
     for invoice in invoices:
         by_client[invoice.client_name].append(invoice)
 
@@ -129,13 +132,13 @@ def plan_archive_names(invoices: Sequence[Invoice]) -> dict[str, str]:
             paths[ordered[0].key] = name
             continue
 
-        # Plusieurs factures : un dossier au nom du client.
+        # Plusieurs documents : un dossier au nom du client.
         folder = unique_filename(client, used_root)
         used_root.append(folder)
 
         used_inner: list[str] = []
         for invoice in ordered:
-            label = invoice.invoice_number or f"p{invoice.first_page}"
+            label = invoice.reference or f"p{invoice.first_page}"
             name = unique_filename(
                 f"{client} - {sanitize_filename(label)}.pdf", used_inner
             )
@@ -146,26 +149,26 @@ def plan_archive_names(invoices: Sequence[Invoice]) -> dict[str, str]:
 
 
 def build_zip_archive(
-    invoices: Iterable[Invoice],
+    invoices: Iterable[PagedDocument],
     sources: Mapping[str, bytes],
     *,
     compress: bool = True,
     progress: Callable[[int, int], None] | None = None,
 ) -> tuple[bytes, list[str]]:
-    """Assemble l'archive ZIP des factures fournies.
+    """Assemble l'archive ZIP des documents fournis.
 
-    Une facture dont la découpe échoue n'interrompt pas l'archive : elle est
-    signalée dans la liste d'erreurs retournée, afin que l'utilisateur récupère
-    tout de même les autres factures.
+    Un document dont la découpe échoue n'interrompt pas l'archive : il est
+    signalé dans la liste d'erreurs retournée, afin que l'utilisateur récupère
+    tout de même les autres documents.
 
     Args:
-        invoices: factures à inclure.
+        invoices: documents à inclure.
         sources: PDF d'origine, indexés par nom de fichier.
-        compress: voir `build_invoice_pdf`.
+        compress: voir `build_document_pdf`.
         progress: rappel optionnel ``(traitées, total)``, pour l'interface.
 
     Returns:
-        ``(contenu_zip, erreurs)`` où `erreurs` liste les factures écartées.
+        ``(contenu_zip, erreurs)`` où `erreurs` liste les documents écartés.
     """
     ordered = list(invoices)
     paths = plan_archive_names(ordered)
@@ -180,7 +183,7 @@ def build_zip_archive(
             if progress is not None:
                 progress(index, total)
             try:
-                payload = build_invoice_pdf(invoice, sources, compress=compress)
+                payload = build_document_pdf(invoice, sources, compress=compress)
             except PackagingError as exc:
                 failures.append(f"{invoice.client_name} : {exc}")
                 continue

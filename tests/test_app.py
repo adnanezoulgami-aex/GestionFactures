@@ -41,10 +41,19 @@ def sent_boxes(app: AppTest) -> list:
 
 @pytest.fixture(autouse=True)
 def isolated_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Chaque test dispose de sa propre base et de caches Streamlit vierges."""
+    """Chaque test dispose de sa propre base SQLite et de caches vierges.
+
+    Neutraliser les variables d'environnement ne suffit pas : sous `AppTest`,
+    un vrai runtime Streamlit est démarré et `st.secrets` lit alors le
+    `.streamlit/secrets.toml` du poste. Sans ce garde-fou, la suite de tests
+    écrirait dans la base Postgres de production.
+    """
     import streamlit as st
 
+    import factures.backend as backend
+
     monkeypatch.setenv("FACTURES_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setattr(backend, "configured_postgres_url", lambda: None)
     st.cache_resource.clear()
     st.cache_data.clear()
     yield
@@ -75,11 +84,11 @@ class TestEmptyState:
         app = AppTest.from_file(APP_PATH, default_timeout=60).run()
         assert app.sidebar.selectbox[0].label == "Mois"
         assert app.sidebar.number_input[0].label == "Année"
-        assert any(b.label == "Traiter les factures" for b in app.sidebar.button)
+        assert any(b.label == "Traiter les documents" for b in app.sidebar.button)
 
     def test_processing_without_files_reports_an_error(self) -> None:
         app = AppTest.from_file(APP_PATH, default_timeout=60).run()
-        next(b for b in app.sidebar.button if b.label == "Traiter les factures").click()
+        next(b for b in app.sidebar.button if b.label == "Traiter les documents").click()
         app.run()
         assert "Aucun fichier" in app.sidebar.error[0].value
 
@@ -127,7 +136,7 @@ class TestSearchAndFilters:
 
     def test_unmatched_search_warns(self, seeded: AppTest) -> None:
         seeded.text_input(key="search_query").set_value("client inexistant").run()
-        assert "Aucune facture" in seeded.warning[0].value
+        assert "Aucun document" in seeded.warning[0].value
 
     def test_month_filter_lists_the_periods_present_in_french(
         self, seeded: AppTest
@@ -149,7 +158,7 @@ class TestSearchAndFilters:
     def test_search_and_month_filter_combine(self, seeded: AppTest) -> None:
         seeded.text_input(key="search_query").set_value("velvetrav").run()
         seeded.selectbox(key="filter_period").set_value("2026-08").run()
-        assert "Aucune facture" in seeded.warning[0].value
+        assert "Aucun document" in seeded.warning[0].value
 
 
 class TestSentStatus:
@@ -177,12 +186,12 @@ class TestSentStatus:
 
     def test_sent_filter_isolates_sent_invoices(self, seeded: AppTest) -> None:
         sent_boxes(seeded)[0].check().run()
-        seeded.selectbox(key="filter_sent").set_value("Envoyées").run()
+        seeded.selectbox(key="filter_sent").set_value("Envoyés").run()
         assert len(sent_boxes(seeded)) == 1
 
     def test_sent_filter_isolates_pending_invoices(self, seeded: AppTest) -> None:
         sent_boxes(seeded)[0].check().run()
-        seeded.selectbox(key="filter_sent").set_value("Non envoyées").run()
+        seeded.selectbox(key="filter_sent").set_value("Non envoyés").run()
         assert len(sent_boxes(seeded)) == 3
 
 
@@ -193,7 +202,7 @@ class TestBulkExport:
         return app.run()
 
     def test_archive_covers_every_month_by_default(self, seeded: AppTest) -> None:
-        payload = self._prepare(seeded, "Tous les mois").session_state["zip_payload"]
+        payload = self._prepare(seeded, "__toutes_periodes__").session_state["zip_payload"]
         assert payload["count"] == 4
         assert payload["name"] == "factures-toutes-periodes.zip"
         assert not payload["failures"]
@@ -204,7 +213,7 @@ class TestBulkExport:
         assert payload["name"] == "factures-2026-07.zip"
 
     def test_archive_groups_repeat_clients_in_a_folder(self, seeded: AppTest) -> None:
-        data = self._prepare(seeded, "Tous les mois").session_state["zip_payload"]["data"]
+        data = self._prepare(seeded, "__toutes_periodes__").session_state["zip_payload"]["data"]
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             assert set(archive.namelist()) == {
                 "DRAKE.pdf",
@@ -216,7 +225,7 @@ class TestBulkExport:
     def test_archive_ignores_the_table_filters(self, seeded: AppTest) -> None:
         """L'export global porte sur tout le lot, pas sur la recherche en cours."""
         seeded.text_input(key="search_query").set_value("drake").run()
-        payload = self._prepare(seeded, "Tous les mois").session_state["zip_payload"]
+        payload = self._prepare(seeded, "__toutes_periodes__").session_state["zip_payload"]
         assert payload["count"] == 4
 
 
@@ -229,7 +238,7 @@ class TestNameCorrection:
 
         assert "DRAKE CORRIGE" in seeded.session_state["name_overrides"].values()
 
-        data = TestBulkExport()._prepare(seeded, "Tous les mois")
+        data = TestBulkExport()._prepare(seeded, "__toutes_periodes__")
         names = data.session_state["zip_payload"]["data"]
         with zipfile.ZipFile(io.BytesIO(names)) as archive:
             assert "DRAKE CORRIGE.pdf" in archive.namelist()
@@ -282,7 +291,7 @@ class TestBatchScopedState:
         seeded.run()
 
         assert not seeded.exception
-        assert seeded.session_state["report"].invoices == ()
+        assert seeded.session_state["report"].documents == ()
         assert "importez vos PDF" in seeded.info[0].value
         assert "search_query" not in seeded.session_state
 

@@ -8,7 +8,6 @@ import pytest
 
 from factures.backend import (
     ENV_POSTGRES_URL,
-    ENV_SUPABASE_URL,
     SentStatusBackend,
     configured_postgres_url,
     create_store,
@@ -21,7 +20,7 @@ from factures.storage import SentStatusStore
 def clean_environment(monkeypatch: pytest.MonkeyPatch):
     """Aucune variable héritée du poste ne doit influencer les tests."""
     monkeypatch.delenv(ENV_POSTGRES_URL, raising=False)
-    monkeypatch.delenv(ENV_SUPABASE_URL, raising=False)
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
 
 
 class TestConfiguredUrl:
@@ -34,16 +33,17 @@ class TestConfiguredUrl:
         monkeypatch.setenv(ENV_POSTGRES_URL, "postgresql://a:b@h:6543/postgres")
         assert configured_postgres_url() == "postgresql://a:b@h:6543/postgres"
 
-    def test_supabase_variable_is_accepted(
+    def test_generic_supabase_variable_is_ignored(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(ENV_SUPABASE_URL, "postgresql://a:b@h:5432/postgres")
-        assert configured_postgres_url() == "postgresql://a:b@h:5432/postgres"
+        """Se brancher sur la premiere base Supabase du poste serait dangereux.
 
-    def test_dedicated_variable_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ENV_POSTGRES_URL, "postgresql://prioritaire@h/postgres")
-        monkeypatch.setenv(ENV_SUPABASE_URL, "postgresql://secondaire@h/postgres")
-        assert "prioritaire" in configured_postgres_url()
+        `SUPABASE_DB_URL` est une variable generique : sur ce poste elle designe
+        la base de production du cabinet. L'application doit exiger un nom qui
+        lui est propre, choisi deliberement pour elle.
+        """
+        monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://a:b@cabinet:5432/postgres")
+        assert configured_postgres_url() is None
 
     @pytest.mark.parametrize("blank", ["", "   "])
     def test_blank_values_are_ignored(

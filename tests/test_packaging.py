@@ -12,9 +12,9 @@ from conftest import InvoiceSpec, make_pdf
 from factures.extraction import extract_invoices
 from factures.packaging import (
     PackagingError,
-    build_invoice_pdf,
+    build_document_pdf,
     build_zip_archive,
-    invoice_display_name,
+    document_display_name,
     plan_archive_names,
 )
 
@@ -33,38 +33,38 @@ def lot():
     payload = make_pdf(specs)
     report = extract_invoices(payload, source_name="lot.pdf")
     assert report.ok
-    return report.invoices, {"lot.pdf": payload}
+    return report.documents, {"lot.pdf": payload}
 
 
 class TestSinglePdf:
     def test_extracted_pdf_contains_only_its_pages(self, lot) -> None:
         invoices, sources = lot
-        payload = build_invoice_pdf(invoices[2], sources)
+        payload = build_document_pdf(invoices[2], sources)
         with pymupdf.open(stream=payload, filetype="pdf") as document:
             assert document.page_count == 1
             assert "1175 - 2026" in document[0].get_text()
 
     def test_multi_page_invoice_keeps_all_its_pages(self) -> None:
         payload = make_pdf([InvoiceSpec(client_name_lines=("LONG",), extra_pages=2)])
-        invoice = extract_invoices(payload, source_name="lot.pdf").invoices[0]
-        result = build_invoice_pdf(invoice, {"lot.pdf": payload})
+        invoice = extract_invoices(payload, source_name="lot.pdf").documents[0]
+        result = build_document_pdf(invoice, {"lot.pdf": payload})
         with pymupdf.open(stream=result, filetype="pdf") as document:
             assert document.page_count == 3
 
     def test_download_name_is_the_client_name(self, lot) -> None:
         invoices, _ = lot
-        assert invoice_display_name(invoices[0]) == "DRAKE.pdf"
+        assert document_display_name(invoices[0]) == "DRAKE.pdf"
 
     def test_missing_source_raises_a_clear_error(self, lot) -> None:
         invoices, _ = lot
         with pytest.raises(PackagingError, match="indisponible"):
-            build_invoice_pdf(invoices[0], {})
+            build_document_pdf(invoices[0], {})
 
     def test_page_range_outside_the_document_is_rejected(self, lot) -> None:
         invoices, _ = lot
         shrunk = make_pdf([InvoiceSpec(client_name_lines=("SEUL",))])
         with pytest.raises(PackagingError, match="hors du document"):
-            build_invoice_pdf(invoices[5], {"lot.pdf": shrunk})
+            build_document_pdf(invoices[5], {"lot.pdf": shrunk})
 
 
 class TestArchiveLayout:
@@ -98,7 +98,7 @@ class TestArchiveLayout:
                 InvoiceSpec(client_name_lines=("A:B",), number="2 - 2026"),
             ]
         )
-        invoices = extract_invoices(payload, source_name="lot.pdf").invoices
+        invoices = extract_invoices(payload, source_name="lot.pdf").documents
         paths = plan_archive_names(invoices)
         assert set(paths.values()) == {"A-B.pdf", "A-B (2).pdf"}
 
@@ -109,7 +109,7 @@ class TestArchiveLayout:
                 InvoiceSpec(client_name_lines=("SANS NUM",), number=None),
             ]
         )
-        invoices = extract_invoices(payload, source_name="lot.pdf").invoices
+        invoices = extract_invoices(payload, source_name="lot.pdf").documents
         paths = set(plan_archive_names(invoices).values())
         assert paths == {"SANS NUM/SANS NUM - p1.pdf", "SANS NUM/SANS NUM - p2.pdf"}
 
@@ -187,8 +187,8 @@ class TestZipArchive:
         embarquées, la page passe d'environ 460 Ko à 140 Ko.
         """
         invoices, sources = lot
-        compressed = build_invoice_pdf(invoices[0], sources, compress=True)
-        raw = build_invoice_pdf(invoices[0], sources, compress=False)
+        compressed = build_document_pdf(invoices[0], sources, compress=True)
+        raw = build_document_pdf(invoices[0], sources, compress=False)
         for payload in (compressed, raw):
             with pymupdf.open(stream=payload, filetype="pdf") as document:
                 assert document.page_count == 1

@@ -1,19 +1,32 @@
-# Gestion des factures
+# Gestion des documents clients
 
-Application Streamlit qui découpe un PDF de factures groupées, identifie le
-client de chaque facture, et permet de les rechercher, de suivre leur envoi et
-de les exporter renommées au nom du client.
+Application Streamlit qui découpe un PDF groupé, identifie le client de chaque
+document, et permet de les rechercher, de suivre leur envoi et de les exporter
+renommés au nom du client.
+
+## Deux types de documents
+
+| Type | Source | Découpage | Renommage |
+| --- | --- | --- | --- |
+| **Factures** | PDF de factures groupées | Libellé « Facture N° » | Nom du client sous la date |
+| **Extraits de compte** | PDF de grand livre | Repère « COMPTE » | Intitulé du compte |
+
+Le type se choisit en haut de la barre latérale. Le parcours est identique dans
+les deux cas ; seuls le gabarit lu et les colonnes affichées changent.
 
 ## Ce que fait l'application
 
-1. **Import** — vous choisissez le mois traité, puis déposez un ou plusieurs
-   PDF. Un même fichier peut contenir plusieurs centaines de factures.
-2. **Extraction** — pour chaque facture : nom du client, numéro, date, ICE,
-   total HT, TVA et TTC.
-3. **Suivi** — un tableau avec recherche plein texte, filtre par mois, filtre
+1. **Import** — vous choisissez le type, puis déposez un ou plusieurs PDF. Un
+   même fichier peut contenir plusieurs centaines de documents. Pour les
+   factures, un mois de référence est demandé ; pour les extraits, la période
+   est lue dans l'en-tête du grand livre.
+2. **Extraction** — pour une facture : nom du client, numéro, date, ICE, HT,
+   TVA et TTC. Pour un extrait : intitulé, code du compte, période, débit,
+   crédit et solde.
+3. **Suivi** — un tableau avec recherche plein texte, filtre de période, filtre
    d'envoi, et une case « Envoyé au client » par ligne.
 4. **Export** — téléchargement unitaire (`NOM DU CLIENT.pdf`) ou archive ZIP
-   d'un mois complet.
+   d'une période complète.
 
 ### Structure de l'archive ZIP
 
@@ -105,7 +118,12 @@ La table `facture_envois` est créée automatiquement au premier démarrage.
 Aucune autre table n'est touchée.
 
 Alternative sans fichier de secrets : définir la variable d'environnement
-`FACTURES_POSTGRES_URL` (ou `SUPABASE_DB_URL`).
+`FACTURES_POSTGRES_URL`.
+
+> **Ce nom est délibérément propre à l'application.** Accepter un nom générique
+> comme `SUPABASE_DB_URL` reviendrait à se brancher sur la première base
+> Supabase configurée sur le poste — potentiellement une base de production sans
+> rapport avec cette application. Un test de non-régression verrouille ce point.
 
 ### Éviter les mises en veille
 
@@ -185,14 +203,17 @@ python -m ruff check .
 ```
 app.py                      Interface Streamlit (présentation uniquement)
 src/factures/
-├── models.py               Invoice, ExtractionReport, périodes
-├── extraction.py           Analyse de la mise en page des PDF
+├── models.py               Invoice, LedgerAccount, protocole PagedDocument
+├── pdfscan.py              Lecture géométrique et découpage, commun aux deux types
+├── extraction.py           Gabarit des factures
+├── ledger.py               Gabarit du grand livre
 ├── naming.py               Noms de fichiers sûrs et uniques
 ├── packaging.py            Découpe des PDF et archives ZIP
 ├── backend.py              Contrat commun et choix du stockage
 ├── storage.py              Backend SQLite
-└── postgres_storage.py     Backend Postgres / Supabase
-tests/                      129 tests (extraction, nommage, ZIP, stockage, UI)
+└── postgres_storage.py     Backend Postgres
+tests/                      168 tests — 157 exécutés, 11 d'intégration Postgres
+                            ignorés faute de base configurée
 ```
 
 Les tests fabriquent leurs propres PDF aux coordonnées du gabarit
@@ -205,7 +226,7 @@ données.
 | Variable | Rôle | Défaut |
 | --- | --- | --- |
 | `FACTURES_POSTGRES_URL` | Chaîne de connexion Postgres. Sa présence active le backend Postgres. | — |
-| `SUPABASE_DB_URL` | Alias accepté pour la précédente | — |
+
 | `FACTURES_DB_PATH` | Emplacement de la base SQLite, quand Postgres n'est pas configuré | `data/factures.db` |
 | `FACTURES_TEST_POSTGRES_URL` | Base contre laquelle exécuter les tests d'intégration Postgres | — |
 

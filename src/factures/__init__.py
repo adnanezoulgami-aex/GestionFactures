@@ -9,13 +9,13 @@ from __future__ import annotations
 from factures.extraction import extract_invoices
 from factures.models import ExtractionReport, Invoice, PageError
 from factures.naming import sanitize_filename, unique_filename
-from factures.packaging import build_invoice_pdf, build_zip_archive
+from factures.packaging import build_document_pdf, build_zip_archive
 
 __all__ = [
     "ExtractionReport",
     "Invoice",
     "PageError",
-    "build_invoice_pdf",
+    "build_document_pdf",
     "build_zip_archive",
     "extract_invoices",
     "sanitize_filename",
