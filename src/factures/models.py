@@ -40,6 +40,10 @@ MOIS_FR: tuple[str, ...] = (
 
 UNKNOWN_PERIOD = "inconnue"
 
+#: Préfixe des fichiers d'extraits de compte, pour qu'un PDF isolé reste
+#: identifiable sans l'ouvrir : « Extrait de compte ABM INVEST.pdf ».
+LEDGER_FILENAME_PREFIX = "Extrait de compte"
+
 
 def periode_key(day: date) -> str:
     """Clé de période triable : ``2026-07``."""
@@ -104,6 +108,14 @@ class PagedDocument(Protocol):
         """Référence distinguant deux documents d'un même client."""
 
     @property
+    def filename_stem(self) -> str:
+        """Nom de fichier souhaité, sans extension ni nettoyage.
+
+        Chaque type décide de la forme de son nom ; le nettoyage des caractères
+        interdits reste à la charge de `factures.naming`.
+        """
+
+    @property
     def period(self) -> str:
         """Clé de période, support du filtre par période."""
 
@@ -147,6 +159,10 @@ class Invoice:
     @property
     def reference(self) -> str | None:
         return self.invoice_number
+
+    @property
+    def filename_stem(self) -> str:
+        return self.client_name
 
     @property
     def period(self) -> str:
@@ -211,6 +227,10 @@ class LedgerAccount:
     @property
     def reference(self) -> str | None:
         return self.account_code
+
+    @property
+    def filename_stem(self) -> str:
+        return f"{LEDGER_FILENAME_PREFIX} {self.client_name}"
 
     @property
     def period(self) -> str:

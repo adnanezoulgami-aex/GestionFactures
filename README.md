@@ -25,13 +25,23 @@ les deux cas ; seuls le gabarit lu et les colonnes affichées changent.
    crédit et solde.
 3. **Suivi** — un tableau avec recherche plein texte, filtre de période, filtre
    d'envoi, et une case « Envoyé au client » par ligne.
-4. **Export** — téléchargement unitaire (`NOM DU CLIENT.pdf`) ou archive ZIP
-   d'une période complète.
+4. **Export** — téléchargement unitaire ou archive ZIP
+   d'une période complète (voir le nommage ci-dessous).
+
+### Nommage des fichiers
+
+| Type | Nom du fichier |
+| --- | --- |
+| Facture | `NOM DU CLIENT.pdf` |
+| Extrait de compte | `Extrait de compte NOM DU CLIENT.pdf` |
+
+Le préfixe des extraits les rend identifiables sans avoir à les ouvrir, ce qui
+compte lorsqu'ils sont envoyés aux clients au milieu d'autres pièces.
 
 ### Structure de l'archive ZIP
 
-Un client avec une seule facture est placé à la racine ; un client avec
-plusieurs factures obtient un dossier à son nom.
+Un client avec un seul document est placé à la racine ; un client en ayant
+plusieurs obtient un dossier à son nom.
 
 ```
 factures-2026-07.zip
@@ -44,6 +54,11 @@ factures-2026-07.zip
 └── Hôtel Nord Pinus Tanger/
     ├── Hôtel Nord Pinus Tanger - 1104-2026.pdf
     └── Hôtel Nord Pinus Tanger - 1160-2026.pdf
+
+extraits-de-compte-toutes-periodes.zip
+├── Extrait de compte ABM INVEST.pdf
+├── Extrait de compte ABRATA INVEST MAROC.pdf
+└── Extrait de compte ZYNKORA CONSULTING.pdf
 ```
 
 ## Installation locale

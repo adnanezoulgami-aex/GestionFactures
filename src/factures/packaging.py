@@ -8,6 +8,9 @@ Règles de nommage demandées :
 * un document par client   -> ``NOM DU CLIENT.pdf`` à la racine de l'archive ;
 * plusieurs documents      -> dossier ``NOM DU CLIENT/`` contenant
   ``NOM DU CLIENT - <référence>.pdf``.
+
+Le libellé exact vient de `PagedDocument.filename_stem` : le nom du client seul
+pour une facture, précédé de « Extrait de compte » pour un extrait de compte.
 """
 
 from __future__ import annotations
@@ -96,8 +99,12 @@ def build_document_pdf(
 
 
 def document_display_name(invoice: PagedDocument) -> str:
-    """Nom de fichier proposé au téléchargement unitaire : le nom du client."""
-    return f"{sanitize_filename(invoice.client_name)}.pdf"
+    """Nom de fichier proposé au téléchargement unitaire.
+
+    C'est le document qui décide de la forme de son nom : le nom du client seul
+    pour une facture, précédé de « Extrait de compte » pour un extrait.
+    """
+    return f"{sanitize_filename(invoice.filename_stem)}.pdf"
 
 
 def plan_archive_names(invoices: Sequence[PagedDocument]) -> dict[str, str]:
@@ -114,7 +121,7 @@ def plan_archive_names(invoices: Sequence[PagedDocument]) -> dict[str, str]:
     # chemins seront simplement différenciés par `unique_filename`.
     by_client: dict[str, list[PagedDocument]] = defaultdict(list)
     for invoice in invoices:
-        by_client[invoice.client_name].append(invoice)
+        by_client[invoice.filename_stem].append(invoice)
 
     paths: dict[str, str] = {}
     used_root: list[str] = []

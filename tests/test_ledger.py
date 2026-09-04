@@ -214,22 +214,35 @@ class TestPackagingIntegration:
         assert report.ok
         return report.documents, {"gl.pdf": payload}
 
-    def test_download_name_is_the_client_name(self, lot) -> None:
+    def test_download_name_is_prefixed(self, lot) -> None:
+        """Un PDF isolé doit rester identifiable sans être ouvert."""
         accounts, _ = lot
-        assert document_display_name(accounts[0]) == "ZYNKORA CONSULTING.pdf"
+        assert (
+            document_display_name(accounts[0])
+            == "Extrait de compte ZYNKORA CONSULTING.pdf"
+        )
 
     def test_single_account_client_sits_at_the_root(self, lot) -> None:
         accounts, _ = lot
         paths = plan_archive_names(accounts)
-        assert paths[accounts[0].key] == "ZYNKORA CONSULTING.pdf"
+        assert paths[accounts[0].key] == "Extrait de compte ZYNKORA CONSULTING.pdf"
 
     def test_repeat_client_gets_a_folder_named_after_them(self, lot) -> None:
         accounts, _ = lot
         paths = plan_archive_names(accounts)
-        assert paths[accounts[1].key] == "Hôtel Nord Pinus/Hôtel Nord Pinus - 0HOTEL.pdf"
-        assert paths[accounts[2].key] == (
-            "Hôtel Nord Pinus/Hôtel Nord Pinus - 0HOTEL2.pdf"
-        )
+        folder = "Extrait de compte Hôtel Nord Pinus"
+        assert paths[accounts[1].key] == f"{folder}/{folder} - 0HOTEL.pdf"
+        assert paths[accounts[2].key] == f"{folder}/{folder} - 0HOTEL2.pdf"
+
+    def test_invoices_are_not_prefixed(self) -> None:
+        """Le préfixe est propre aux extraits : les factures gardent leur nom."""
+        from conftest import InvoiceSpec, make_pdf
+        from factures.extraction import extract_invoices
+
+        invoice = extract_invoices(
+            make_pdf([InvoiceSpec(client_name_lines=("DRAKE",))]), source_name="f.pdf"
+        ).documents[0]
+        assert document_display_name(invoice) == "DRAKE.pdf"
 
     def test_extracted_pdf_contains_only_its_page(self, lot) -> None:
         accounts, sources = lot
