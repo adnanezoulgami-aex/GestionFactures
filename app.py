@@ -575,7 +575,9 @@ def render_table(
     labels = ("Envoyé", *(col.label for col in kind.columns), "PDF")
 
     header = st.columns(widths)
-    for column, label in zip(header, labels, strict=True):
+    # `widths` et `labels` sont construits depuis les mêmes colonnes : leurs
+    # longueurs sont égales par construction.
+    for column, label in zip(header, labels):
         column.markdown(f"**{label}**")
     st.divider()
 

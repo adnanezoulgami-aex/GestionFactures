@@ -18,7 +18,7 @@ import sqlite3
 import threading
 import weakref
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -160,7 +160,7 @@ class SentStatusStore:
         period: str = "",
     ) -> None:
         """Enregistre (ou met à jour) le statut d'une facture."""
-        now = datetime.now(UTC).isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self._lock, self._connection:
             self._connection.execute(
                 """
@@ -179,7 +179,7 @@ class SentStatusStore:
         """Écriture groupée, utilisée par les actions « tout cocher »."""
         if not statuses:
             return
-        now = datetime.now(UTC).isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         rows = [(key, int(value), now) for key, value in statuses.items()]
         with self._lock, self._connection:
             self._connection.executemany(

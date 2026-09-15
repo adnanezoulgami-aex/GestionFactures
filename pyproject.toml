@@ -2,7 +2,7 @@
 name = "gestion-factures"
 version = "1.0.0"
 description = "Extraction, indexation et export de factures PDF renommées par client."
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "streamlit>=1.40,<2.0",
     "pymupdf>=1.24,<2.0",
@@ -32,7 +32,7 @@ filterwarnings = ["error"]
 
 [tool.ruff]
 line-length = 95
-target-version = "py311"
+target-version = "py39"
 src = ["src", "tests"]
 
 [tool.ruff.lint]

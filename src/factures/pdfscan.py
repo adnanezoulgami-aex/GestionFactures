@@ -16,11 +16,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from itertools import pairwise
+from typing import TypeVar
 
 import pymupdf
 
@@ -28,11 +28,23 @@ from factures.models import ExtractionReport, PagedDocument, PageError
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
 
 #: Un montant : chiffres, séparateurs de milliers, deux décimales au plus.
 #: `\s` couvre les espaces insécables U+00A0 et U+202F du gabarit.
 AMOUNT_RE = re.compile(r"^-?[\d\s.]*\d(?:[.,]\d{1,2})?$")
+
+
+def consecutive_pairs(items: Sequence[T]) -> Iterator[tuple[T, T]]:
+    """Paires d'éléments successifs : ``[a, b, c]`` -> ``(a, b), (b, c)``.
+
+    Équivaut à `itertools.pairwise`, absent avant Python 3.10. L'application
+    doit rester exécutable sur les versions de Python proposées par les
+    hébergeurs, qui ne sont pas toujours les plus récentes.
+    """
+    return zip(items, items[1:])
 
 
 @dataclass(frozen=True)
@@ -205,7 +217,7 @@ def split_documents(
 
         # 3) Chaque document court jusqu'au début du suivant.
         boundaries = [*starts, len(page_lines)]
-        for start, next_start in pairwise(boundaries):
+        for start, next_start in consecutive_pairs(boundaries):
             span = DocumentSpan(
                 source_name=source_name,
                 source_digest=digest,

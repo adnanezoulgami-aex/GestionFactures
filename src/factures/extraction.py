@@ -31,13 +31,13 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from itertools import pairwise
 
 from factures.models import ExtractionReport, Invoice
 from factures.pdfscan import (
     DocumentSpan,
     TextLine,
     amount_on_row,
+    consecutive_pairs,
     parse_french_date,
     same_row,
     split_documents,
@@ -107,7 +107,7 @@ def _find_client_name(
     # On avance tant que les lignes se suivent à l'interligne simple : dès qu'un
     # saut plus large apparaît, on est passé du nom à l'adresse.
     name_lines = [block[0]]
-    for previous, current in pairwise(block):
+    for previous, current in consecutive_pairs(block):
         if current.y0 - previous.y0 > layout.name_continuation_max_gap:
             break
         name_lines.append(current)
