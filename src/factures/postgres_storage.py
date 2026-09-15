@@ -29,6 +29,11 @@ logger = logging.getLogger(__name__)
 #: Table dédiée à l'application. Aucune table métier existante n'est touchée.
 TABLE_NAME = "facture_envois"
 
+#: Délai d'établissement de la connexion. Volontairement bref : l'application
+#: doit rester affichable même quand la base dort — un projet Supabase gratuit
+#: se met en pause après une semaine sans activité.
+CONNECT_TIMEOUT_SECONDS = 5.0
+
 _SCHEMA = sql.SQL(
     """
     CREATE TABLE IF NOT EXISTS {table} (
@@ -97,7 +102,7 @@ class PostgresSentStatusStore:
         table: str = TABLE_NAME,
         min_size: int = 0,
         max_size: int = 4,
-        timeout: float = 15.0,
+        timeout: float = CONNECT_TIMEOUT_SECONDS,
     ) -> None:
         if not url or not url.strip():
             raise ValueError("Chaîne de connexion Postgres vide.")
@@ -106,7 +111,10 @@ class PostgresSentStatusStore:
         self._table = sql.Identifier(table)
         self._table_name = table
         # `open=False` puis `open()` explicite : la connexion échoue ici, à la
-        # construction, plutôt qu'au premier clic de l'utilisateur.
+        # construction, plutôt qu'au premier clic de l'utilisateur. Le délai est
+        # court à dessein : une base injoignable doit se signaler vite, sans
+        # retarder l'affichage au point de faire échouer le contrôle de santé
+        # de l'hébergeur.
         self._pool = ConnectionPool(
             self._url,
             min_size=min_size,

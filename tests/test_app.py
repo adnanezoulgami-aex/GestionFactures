@@ -313,3 +313,73 @@ class TestBatchScopedState:
         assert not seeded.exception
         # Streamlit retombe sur la première option : tout le lot reste visible.
         assert len(sent_boxes(seeded)) == 1
+
+
+class TestUnreachableDatabase:
+    """Une base injoignable ne doit jamais empêcher l'application de servir.
+
+    C'est le scénario d'un projet Supabase gratuit mis en pause après une
+    semaine sans activité : l'app doit rester affichable et les documents
+    téléchargeables, seul le suivi des envois devenant indisponible.
+    """
+
+    @pytest.fixture
+    def broken_db(self, monkeypatch: pytest.MonkeyPatch):
+        """Pointe le backend vers une adresse qui refuse la connexion."""
+        import factures.backend as backend
+
+        monkeypatch.setattr(
+            backend,
+            "configured_postgres_url",
+            lambda: "postgresql://u:p@127.0.0.1:1/postgres?connect_timeout=1",
+        )
+
+    def test_the_app_still_renders(self, broken_db, seeded: AppTest) -> None:
+        assert not seeded.exception
+        assert len(sent_boxes(seeded)) == 4
+
+    def test_the_failure_is_shown_not_hidden(self, broken_db, seeded: AppTest) -> None:
+        errors = [e.value for e in seeded.sidebar.error]
+        assert any("injoignable" in e for e in errors)
+
+    def test_documents_remain_downloadable(self, broken_db, seeded: AppTest) -> None:
+        downloads = [
+            widget
+            for widget in seeded.get("download_button")
+            if widget.label == "⬇️ Télécharger"
+        ]
+        assert len(downloads) == 4
+
+    def test_checkboxes_default_to_unchecked(self, broken_db, seeded: AppTest) -> None:
+        assert all(box.value is False for box in sent_boxes(seeded))
+
+    def test_failure_is_remembered_instead_of_retried(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Retenter à chaque rerun rendrait l'application inutilisable.
+
+        Chaque tentative coûte le délai de connexion : répétée à chaque clic,
+        elle fige l'interface et peut faire échouer le contrôle de santé de
+        l'hébergeur.
+        """
+        import factures.backend as backend
+
+        attempts = {"n": 0}
+
+        def counting_url() -> str:
+            attempts["n"] += 1
+            return "postgresql://u:p@127.0.0.1:1/postgres?connect_timeout=1"
+
+        monkeypatch.setattr(backend, "configured_postgres_url", counting_url)
+
+        payload = make_pdf(SPECS)
+        report = extract_invoices(payload, source_name="lot.pdf")
+        app = AppTest.from_file(APP_PATH, default_timeout=90)
+        app.session_state["sources"] = {"lot.pdf": payload}
+        app.session_state["report"] = report
+        app.run()
+        first = attempts["n"]
+        assert first >= 1, "aucune tentative de connexion n'a eu lieu"
+
+        app.run()
+        assert attempts["n"] == first, "une reconnexion a été tentée au rerun"

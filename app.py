@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
@@ -211,17 +212,50 @@ def get_store() -> SentStatusBackend:
     return create_store()
 
 
+#: Durée pendant laquelle un échec de connexion est mémorisé, en secondes.
+STORE_FAILURE_COOLDOWN = 120.0
+
+
+@st.cache_resource(show_spinner=False)
+def _failure_memo() -> dict[str, object]:
+    """Dernier échec de connexion, partagé par toutes les sessions.
+
+    Streamlit réexécute le script entier à chaque interaction : une variable
+    globale de module y serait réinitialisée à chaque fois et ne mémoriserait
+    donc rien. `cache_resource` est le seul état qui traverse les réexécutions.
+    """
+    return {}
+
+
 def resolve_store() -> tuple[SentStatusBackend | None, str | None]:
     """Magasin de statuts, ou le message d'erreur à afficher.
 
     Une base injoignable ne doit pas empêcher d'extraire et de télécharger les
     documents : seul le suivi des envois est indisponible.
+
+    Un échec est mémorisé quelques minutes. Sans cela, chaque réexécution du
+    script — il y en a une à chaque clic — relancerait une tentative de
+    connexion de plusieurs secondes, rendant l'application inutilisable et
+    pouvant faire échouer le contrôle de santé de l'hébergeur. C'est le cas
+    quand un projet Supabase gratuit s'est mis en pause.
     """
+    memo = _failure_memo()
+    failed_at = memo.get("at")
+    if isinstance(failed_at, float):
+        if time.monotonic() - failed_at < STORE_FAILURE_COOLDOWN:
+            return None, str(memo.get("message", ""))
+        memo.clear()
+
     try:
-        return get_store(), None
+        store = get_store()
     except Exception as exc:
         logging.exception("Connexion au stockage impossible")
+        memo["at"] = time.monotonic()
+        memo["message"] = str(exc)
         return None, str(exc)
+
+    memo.clear()
+    return store, None
 
 
 def render_storage_status(store: SentStatusBackend | None, error: str | None) -> None:
