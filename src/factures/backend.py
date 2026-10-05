@@ -108,7 +108,16 @@ def create_store() -> SentStatusBackend:
     """
     url = configured_postgres_url()
     if url:
-        from factures.postgres_storage import PostgresSentStatusStore
+        try:
+            from factures.postgres_storage import PostgresSentStatusStore
+        except ImportError as exc:  # pragma: no cover - dépend de l'installation
+            # psycopg n'est pas dans les dépendances de base : son absence doit
+            # produire un message clair, pas une trace d'import incompréhensible.
+            raise RuntimeError(
+                "Une base Postgres est configurée mais le pilote n'est pas "
+                "installé. Ajoutez à requirements.txt : "
+                "psycopg[binary]>=3.2,<4.0 et psycopg-pool>=3.2,<4.0"
+            ) from exc
 
         return PostgresSentStatusStore(url)
 

@@ -1,4 +1,10 @@
+# Dépendances de l'application déployée. Volontairement minimales : chaque
+# paquet supplémentaire est une cause d'échec possible à l'installation sur
+# l'hébergeur.
+#
+# Le suivi des envois sur Postgres est OPTIONNEL et n'est pas installé ici.
+# Pour l'activer, ajoutez ces deux lignes :
+#     psycopg[binary]>=3.2,<4.0
+#     psycopg-pool>=3.2,<4.0
 streamlit>=1.40,<2.0
 pymupdf>=1.24,<2.0
-psycopg[binary]>=3.2,<4.0
-psycopg-pool>=3.2,<4.0
